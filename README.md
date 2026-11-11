@@ -69,7 +69,37 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\proxy-bypass.ps1
 
 浏览器需保留可用的认证信息；本项目不读取、保存或代填账号密码。需要首次手动登录、验证码类型变化或账号异常时，仍须人工处理。
 
-**默认没有设置开机自启。重启电脑后需重新运行 `start.cmd`。**
+首次下载默认不注册自启动。如需重启后自动运行，请完成下面的自启动设置。
+
+### 5. 启用登录后自动启动（可选）
+
+在实际运行项目的目录执行一次，无需管理员权限：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\autostart.ps1 -Action Enable
+```
+
+它在**当前 Windows 用户的启动文件夹**创建 `DGUT Auto Reconnect.lnk`，隐藏启动这个目录中的 `guardian.ps1`，后者负责启动本机 OCR。重复执行不会创建多个条目；守护本身也有单实例保护。
+
+这里的“开机自启”准确说是**重启后登录该 Windows 用户时自动启动**。登录前不会运行，不配置自动登录、不保存 Windows 密码、不创建管理员任务或系统服务。因为认证需要当前用户浏览器及油猴，所以不使用登录前的非交互系统服务。
+
+注意：
+
+- 从实际运行目录启用，不要从没有 `.venv` 的源码备份目录启用。
+- Windows 可能延迟执行启动项；本次启动会进入正常监控，无需提前联网。
+- 保持项目路径不变。移动前先在旧目录禁用，移动后重建虚拟环境并重新启用。
+- 若 Windows 的“启动应用”设置或安全软件禁用了该条目，需要在系统设置中恢复；`Status` 检查快捷方式注册情况，不承诺系统允许执行。
+- `stop.cmd` 仅停止这次运行，不删除自启动条目；下次登录仍会启动。
+- 自启动不会自动更改油猴的暂停状态，也不会代填账号密码。要实现无人值守，应确保新版已启用、未暂停且浏览器认证信息可用。
+
+查看注册状态和关闭自启动：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\autostart.ps1 -Action Status
+powershell -NoProfile -ExecutionPolicy Bypass -File .\autostart.ps1 -Action Disable
+```
+
+禁用只删除经目标、参数和标记验证属于本目录的快捷方式，不停止已经运行的守护；需要立即停止时再执行 `stop.cmd`。重新执行 `Enable` 可恢复。遇到同名但目标不匹配的条目会拒绝覆盖或删除。
 
 ## 日常操作
 
@@ -77,6 +107,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\proxy-bypass.ps1
 |---|---|
 | 启动后台和 OCR | 双击 `start.cmd` |
 | 停止后台和 OCR | 双击 `stop.cmd`，等待正在执行的请求结束 |
+| 启用／查看／关闭自启动 | `autostart.ps1 -Action Enable` / `Status` / `Disable`，见上文完整命令 |
 | 暂停网页自动认证 | 点击新版控制面板“暂停自动认证” |
 | 恢复网页自动认证 | 点击“恢复自动认证” |
 | 单次只读联网检测 | `powershell -NoProfile -File .\guardian.ps1 -Once` |
@@ -203,12 +234,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\proxy-bypass.ps1 -Restore
 
 ```powershell
 powershell -NoProfile -File .\tests.ps1
+powershell -NoProfile -File .\autostart.tests.ps1
 node --test .\userscript.test.cjs .\ocr-userscript.test.cjs
 .\.venv\Scripts\python.exe -m unittest discover -s . -p test_ocr_service.py
 node --check .\dgut-reconnect.user.js
 ```
 
 已有验证：15 项 PowerShell 断言、18 项 JavaScript 测试、5 项 Python 测试；覆盖掉线状态机、限额、暂停、图片变化、字段填写、旧版冲突和重复注入等。另已完成本机 HTTP 健康检查、非预期来源拒绝测试，以及一张用户提供的验证码截图识别测试。
+
+新增自启动测试在临时目录创建真实 Windows 快捷方式，覆盖注册、路径引用、隐藏窗口参数、幂等操作、拒绝修改其他配置及撤销；不修改真实启动文件夹。快捷方式启动可在当前会话验证，但实际重启／重新登录属于单独验收，本次没有自动重启电脑。
 
 实际运行日志已出现新版提交认证事件，随后检查到联网正常。但尚未完成可控的“掉线 → 出现真实验证码 → 自动识别提交 → 联网恢复”端到端测试；单张截图识别正确不代表总体准确率。不要据此承诺全天候无故障或无人值守必然成功。
 
@@ -220,6 +254,8 @@ node --check .\dgut-reconnect.user.js
 | `ocr_service.py` | 本机离线识别、共享限额和日志 |
 | `dgut-reconnect.user.js` | 浏览器认证页自动化和控制面板 |
 | `start.cmd` / `stop.cmd` | 后台启动、停止入口 |
+| `autostart.ps1` | 当前用户登录自启动的启用、状态查询和禁用 |
+| `autostart.tests.ps1` | 独立临时目录内的自启动快捷方式测试 |
 | `proxy-bypass.ps1` | 精确代理例外及回滚 |
 | `requirements.txt` | OCR 主依赖版本 |
 | `tests.ps1` | 后台状态机测试 |
