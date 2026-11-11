@@ -4,6 +4,55 @@ Windows 上的 DGUT 校园网自动重连助手：后台检测直连联网状态
 
 > 仅用于本人获授权的校园网账号与设备，并遵守学校网络使用规定。它不绕过账号认证、不增加设备配额、不处理滑块或点选验证码，也不保证所有断网原因都能自动恢复。
 
+## 不熟悉命令？从这里开始
+
+1. 在 GitHub 页面选择 **Code → Download ZIP**，解压到一个固定文件夹。不要在压缩包里直接运行。
+2. 双击 **`一键安装.cmd`**。它会自动查找可用 Python、创建项目独立环境、安装依赖并加载模型验证；已经安装好的环境会跳过。缺少 Python 时按窗口提示安装，再双击重试。
+3. 按窗口提示，在默认浏览器安装 Tampermonkey，创建脚本并粘贴 `dgut-reconnect.user.js` 全文，保存、启用。允许连接 `127.0.0.1`；账号信息由你在学校页面填写。详细步骤见下方“安装网页认证脚本”。
+4. 双击 **`启动监控.cmd`**，再双击 **`检查运行状态.cmd`**。窗口会逐项显示中文状态和需要处理的事项。
+5. 如需每次登录 Windows 自动启动，再双击 **`开启登录自启动.cmd`**。不是必选项，也不会在安装时偷偷开启。
+
+安装窗口会停留，便于阅读错误；遇到红色“未完成”请先按提示处理。**“本地环境安装完成”不等于浏览器脚本已经安装，更不等于实际断网认证已验证。**
+
+| 双击哪个文件 | 用途 |
+|---|---|
+| `一键安装.cmd` | 检测并安装本地依赖，不修改系统代理、不自动注册自启动 |
+| `启动监控.cmd` | 检查环境及端口后启动，显示初步运行检查 |
+| `检查运行状态.cmd` | 中文状态报告：依赖、监控、OCR、网页心跳、自启动及下一步提示 |
+| `停止监控.cmd` | 请求停止本次后台和OCR，不取消自启动 |
+| `开启登录自启动.cmd` | 注册当前用户登录后自动启动 |
+| `关闭登录自启动.cmd` | 取消自启动，不停止当前正在运行的进程 |
+
+普通使用者不需要安装 Git 或 Node.js。完全卸载前，先停止监控、关闭自启动、停用油猴脚本；如曾添加代理例外，按后文撤销。程序不会自动删除你的项目目录或系统 Python。
+
+## 想让 AI 帮你配置？直接复制
+
+把下载的项目文件夹交给能访问本机文件和终端的 AI，并发送：
+
+> 请帮我安装配置当前目录的 DGUT Auto Reconnect。先阅读 README.md 和 AI_SETUP.md，再根据我实际的 Windows、Python、浏览器和代理环境操作，不要假设我装过旧版或照抄其他电脑的路径。优先使用 setup.ps1 的 Install、Check、Start 功能；依赖只能装在本项目 .venv。需要安装系统软件、修改代理或启用自启动时先征得我同意。不要读取或上传密码、Cookie、代理订阅，不要主动断网、退出账号、结束不明进程或绕过安全策略。浏览器步骤需要我操作时给出明确指引。最后逐项验证并区分已完成与未验证内容，告诉我如何停止和回滚。
+
+完整提示词、故障分支和验收标准见 **[AI_SETUP.md](AI_SETUP.md)**。
+
+### 自适配范围
+
+- 自动使用当前项目路径，支持用户名、中文、空格等常见路径差异；不写死作者电脑目录。
+- 查找已有 `.venv`、PATH、Python launcher 列表和标准 Python 注册表记录；验证 64 位 Python 3.10+，跳过 Microsoft Store 占位入口。特殊安装可通过 `-PythonPath` 指定。
+- 已有环境正常时跳过；损坏环境保留并报错，不自动覆盖。安装前验证解释器确实属于本项目 `.venv`。
+- 检查OCR服务身份及所属项目目录；端口被其他程序占用时提示处理，不杀进程、不擅自换端口。
+- 检测默认浏览器标识、系统代理/PAC是否启用、认证域名例外和自启动注册情况，提供建议但不自动修改。
+- **不承诺自动兼容所有环境**：当前仍仅支持 Windows + DGUT 指定认证页面 + 四位数字验证码；不自动安装系统 Python、浏览器扩展，不适配其他学校或验证码类型。安装依赖需要联网。
+
+命令行入口（可选）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -Action Install
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -Action Check -Json
+# 自动检测不到自定义 Python 时，替换为自己的真实路径
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -Action Install -PythonPath "D:\Python\python.exe"
+```
+
+以下是手动安装和进阶说明；使用一键入口完成的步骤无需重复。
+
 ## 功能与工作流程
 
 1. Windows 后台串行检测联网状态，连续三轮失败后检查认证入口。
@@ -18,7 +67,7 @@ Windows 上的 DGUT 校园网自动重连助手：后台检测直连联网状态
 ## 环境要求
 
 - Windows 10/11，Windows PowerShell 5.1。
-- Python 3.10 或以上及 pip；本项目已在 Windows x64 / Python 3.13 环境运行验证。其他版本仍需自行验证依赖兼容性。
+- 64 位 Python 3.10 或以上及 pip；本项目已在 Windows x64 / Python 3.13 环境运行验证。其他版本仍需自行验证依赖兼容性。
 - 默认浏览器中安装 Tampermonkey 或兼容的用户脚本管理器，并允许脚本在认证页面运行。
 - 首次安装 Python 依赖需要网络；安装完成后 OCR 推理不依赖外网。
 - Node.js 仅用于开发测试，日常运行不需要。
@@ -248,6 +297,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\proxy-bypass.ps1 -Restore
 ```powershell
 powershell -NoProfile -File .\tests.ps1
 powershell -NoProfile -File .\autostart.tests.ps1
+powershell -NoProfile -File .\setup.tests.ps1
 node --test .\userscript.test.cjs .\ocr-userscript.test.cjs
 .\.venv\Scripts\python.exe -m unittest discover -s . -p test_ocr_service.py
 node --check .\dgut-reconnect.user.js
@@ -257,6 +307,8 @@ node --check .\dgut-reconnect.user.js
 
 新增自启动测试在临时目录创建真实 Windows 快捷方式，覆盖注册、路径引用、隐藏窗口参数、幂等操作、拒绝修改其他配置及撤销；不修改真实启动文件夹。快捷方式启动可在当前会话验证，但实际重启／重新登录属于单独验收，本次没有自动重启电脑。
 
+安装器新增22项基础检查测试；另在包含中文、空格、方括号的独立临时目录完成从零安装、模型加载、重复安装跳过验证，并验证另一目录占用OCR端口时拒绝启动。现有版本合计71项自动测试通过。这些结果只代表已测环境，不代表所有用户电脑均已覆盖。
+
 实际运行日志已出现新版提交认证事件，随后检查到联网正常。但尚未完成可控的“掉线 → 出现真实验证码 → 自动识别提交 → 联网恢复”端到端测试；单张截图识别正确不代表总体准确率。不要据此承诺全天候无故障或无人值守必然成功。
 
 ## 文件说明
@@ -264,6 +316,9 @@ node --check .\dgut-reconnect.user.js
 | 文件 | 用途 |
 |---|---|
 | `guardian.ps1` | 后台联网检测、开页、页面心跳与 OCR 生命周期 |
+| `setup.ps1` / `setup.tests.ps1` | 自适配安装、中文诊断和回归测试 |
+| 中文命名的 `.cmd` 文件 | 面向普通用户的双击入口 |
+| `AI_SETUP.md` | 可复制的AI配置提示词、权限边界和验收步骤 |
 | `ocr_service.py` | 本机离线识别、共享限额和日志 |
 | `dgut-reconnect.user.js` | 浏览器认证页自动化和控制面板 |
 | `start.cmd` / `stop.cmd` | 后台启动、停止入口 |
@@ -275,4 +330,8 @@ node --check .\dgut-reconnect.user.js
 | `userscript.test.cjs` / `ocr-userscript.test.cjs` | 网页行为与输入保护测试 |
 | `test_ocr_service.py` | 本机服务基础逻辑测试 |
 
-第三方依赖遵循各自许可证。本仓库未额外声明开源许可证；是否公开及选择何种许可证由仓库所有者决定。
+## 许可证
+
+本项目采用 **[MIT License](LICENSE)**，版权署名为 `Copyright (c) 2026 jiulics`。允许按许可证条件使用、修改和分发，须保留版权及许可声明；软件按原样提供，不作担保。
+
+第三方依赖与模型仍遵循各自许可，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。这里的 LICENSE 是开源许可证，不是代码签名证书或 HTTPS 证书；它不会让 Windows 自动信任可执行文件，也不改变仓库可见性。

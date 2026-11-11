@@ -1,4 +1,5 @@
 .venv/
+.venv*/
 __pycache__/
 *.py[cod]
 *.log
@@ -12,6 +13,7 @@ proxy-bypass-backup.json
 internet.txt
 implementation-plan.md
 ocr-implementation-plan.md
+easy-setup-plan.md
 .env
 .env.*
 *.png
