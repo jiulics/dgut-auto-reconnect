@@ -209,8 +209,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\autostart.ps1 -Action Disa
 | `guardian.stop` | 停止标志，重新启动时自动清除 |
 | `proxy-bypass-backup.json` | 代理例外的本地回滚记录 |
 | `proxy-bypass-policy.json` | 是否允许持续维护认证域名例外，默认关闭 |
-| `network-events.jsonl` | 每行一个结构化的网络状态变化事件 |
-| `network-history-state.json` | 跨进程重启保存尚未结束的掉线观测状态 |
 
 实时查看日志：
 
@@ -233,34 +231,12 @@ Get-Content .\ocr.log -Tail 30 -Wait
 | `PageActive` | 新版网页心跳是否仍在有效期内 |
 | `PortalReachable` | 掉线时认证入口是否可达；联网正常时不检查，因此 `false` 不代表故障 |
 | `Action` | `online` 正常；`wait` 等待；`open` 本轮打开了认证入口 |
-| `OutageStartedAt` | 本次连续失败的首次检测时间；没有待恢复异常时为空 |
-| `OutageConfirmedAt` | 连续三次失败后的确认时间；尚未确认时为空 |
-| `ProxyGuardEnabled` | 是否已明确授权持续维护系统代理域名例外 |
 
-### 查看掉线开始、恢复时间和持续时长
+### 当前版本的日志范围
 
-从本次升级后，网络事件同时写入 `guardian.log` 和 `network-events.jsonl`。正常联网时不反复记录；事件文件约1MB轮转，保留一个上一份文件。
+当前版本已回退到 `d0a211b` 的后台检测、页面心跳和弹页流程，仅保留可选的代理例外守护。不再记录或读取新增的掉线历史状态，也不再计算持续时长。已有 `network-events.jsonl` 和 `network-history-state.json` 留在本机作为历史资料，不删除、不继续更新。
 
-| 事件 | 含义 |
-|---|---|
-| `NETWORK_SUSPECT` | 首次检测失败，记录首次失败和此前最后一次正常检测时间 |
-| `NETWORK_DOWN` | 连续三次采样失败，确认检测异常；`StartedAt` 仍取首次失败时间 |
-| `NETWORK_RECOVERED` | 已确认异常后恢复，包含 `StartedAt`、`RecoveredAt`、`DurationSeconds`、`Duration` |
-| `NETWORK_TRANSIENT_RECOVERED` | 仅一至两次失败就恢复，单独标为短暂检测异常 |
-| `NETWORK_MONITORING_GAP` | 两次采样相隔超过90秒或系统时钟回拨，中间状态未知 |
-| `NETWORK_MONITORING_RESUMED` | 后台重启时恢复了尚未结束的异常记录，明确标记监测中断 |
-
-读取最近事件：
-
-```powershell
-Get-Content .\network-events.jsonl -Tail 20 |
-    ForEach-Object { $_ | ConvertFrom-Json } |
-    Format-Table Event, StartedAt, RecoveredAt, Duration, ContainsMonitoringGap -AutoSize
-```
-
-尚未出现新事件时，该文件可能还不存在，这是正常情况。`DurationSeconds` 是首次失败检测到恢复检测之间的观测时长，**不是精确的物理断网时长**。两个探测站同时不可达也会触发检测异常。`ContainsMonitoringGap=true` 表示时长包含未观测区间，不能推断期间一直断网；时钟回拨导致负时长时，时长字段留空而不是编造数值。
-
-历史状态会随每次采样更新，正常停止后也保留。此前版本未记录的掉线起止时间无法补算，本次升级不回填猜测的历史数据。
+因此，仅凭打开认证页或OCR事件不能准确推断断网持续多久。排障需同时检查后台、OCR服务和网页通信是否正常。代理守护状态可通过 `setup.ps1 -Action Check -Json` 查看。
 
 典型认证事件：
 
@@ -349,7 +325,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\proxy-bypass.ps1 -Restore
 powershell -NoProfile -File .\tests.ps1
 powershell -NoProfile -File .\autostart.tests.ps1
 powershell -NoProfile -File .\setup.tests.ps1
-powershell -NoProfile -File .\network-history.tests.ps1
 powershell -NoProfile -File .\proxy-bypass.tests.ps1
 node --test .\userscript.test.cjs .\ocr-userscript.test.cjs
 .\.venv\Scripts\python.exe -m unittest discover -s . -p test_ocr_service.py
@@ -362,7 +337,7 @@ node --check .\dgut-reconnect.user.js
 
 安装器新增22项基础检查测试；另在包含中文、空格、方括号的独立临时目录完成从零安装、模型加载、重复安装跳过验证，并验证另一目录占用OCR端口时拒绝启动。现有版本合计71项自动测试通过。这些结果只代表已测环境，不代表所有用户电脑均已覆盖。
 
-网络事件与代理守护另外增加38项测试（累计109项），覆盖短暂失败、确认/恢复、持续时长、监测空档、历史序列化、例外被覆盖后的补回、保留其他例外、关闭与回滚。代理测试只操作隔离的临时注册表键和文件，不改真实系统代理，不主动断网。
+代理守护保留21项测试，连同之前71项共92项测试。覆盖例外被覆盖后的补回、保留其他例外、关闭与回滚；只操作隔离的临时注册表键和文件，不改真实系统代理。新增的17项掉线历史测试随功能回退移除。
 
 实际运行日志已出现新版提交认证事件，随后检查到联网正常。但尚未完成可控的“掉线 → 出现真实验证码 → 自动识别提交 → 联网恢复”端到端测试；单张截图识别正确不代表总体准确率。不要据此承诺全天候无故障或无人值守必然成功。
 
@@ -380,7 +355,7 @@ node --check .\dgut-reconnect.user.js
 | `autostart.ps1` | 当前用户登录自启动的启用、状态查询和禁用 |
 | `autostart.tests.ps1` | 独立临时目录内的自启动快捷方式测试 |
 | `proxy-bypass.ps1` | 精确代理例外及回滚 |
-| `network-history.tests.ps1` / `proxy-bypass.tests.ps1` | 网络事件和代理例外守护的回归测试 |
+| `proxy-bypass.tests.ps1` | 代理例外守护的回归测试 |
 | `requirements.txt` | OCR 主依赖版本 |
 | `tests.ps1` | 后台状态机测试 |
 | `userscript.test.cjs` / `ocr-userscript.test.cjs` | 网页行为与输入保护测试 |

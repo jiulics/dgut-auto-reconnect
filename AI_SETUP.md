@@ -94,7 +94,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\proxy-bypass.ps1
 - **OCR 不就绪**：检查缺失依赖与 ocr.log 的错误类别，避免上传含个人信息的文件。
 - **无网页心跳**：引导打开认证页、检查脚本启用、127.0.0.1权限和标签页休眠。不能据此直接断定安装失败。
 - **登录仍失败**：检查网页是否暂停、是否存在旧脚本、验证码类型与账号状态。不要扩大权限或提高提交频率。
-- **询问掉线历史**：读取 `network-events.jsonl` 的首次失败、确认与恢复事件。持续时长以采样为准；`ContainsMonitoringGap=true` 时不能说全程断网。旧版本没有记录的起止时间无法补算，不把 OCR 成功等同于联网恢复。
+- **询问掉线历史**：当前已回退掉线历史功能，只依据现有日志说明检测和认证尝试，不计算缺少证据的持续时长。历史事件文件保留但不再更新；不把 OCR 成功等同于联网恢复。
 - **安全策略阻止**：报告被阻止的具体操作，由用户在可信终端手动执行。不能尝试不同工具实现相同被阻止的行为。
 
 ### 7. 停止、撤销与移除
@@ -114,7 +114,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\proxy-bypass.ps1 -Restore
 powershell -NoProfile -File .\setup.tests.ps1
 powershell -NoProfile -File .\autostart.tests.ps1
 powershell -NoProfile -File .\tests.ps1
-powershell -NoProfile -File .\network-history.tests.ps1
 powershell -NoProfile -File .\proxy-bypass.tests.ps1
 node --test .\userscript.test.cjs .\ocr-userscript.test.cjs
 .\.venv\Scripts\python.exe -m unittest discover -s . -p test_ocr_service.py
