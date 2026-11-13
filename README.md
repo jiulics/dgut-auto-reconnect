@@ -123,6 +123,26 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\proxy-bypass.ps1
 
 这是系统 HTTP 代理例外，**不控制 TUN、浏览器代理扩展或其他路由层**。若认证跳转目标仍被代理接管，需要在相应客户端核实 DIRECT 规则。代理软件重写系统例外后，也可能需要重新执行该命令。
 
+#### 防止代理客户端覆盖例外（可选、需明确启用）
+
+部分代理客户端会在启动或重新应用系统代理时，把自身保存的例外列表写回 Windows。因此只改一次系统 `ProxyOverride`，可能在之后丢失。可优先在代理客户端自己的“系统代理例外”中保留 `login.dgut.edu.cn`；本项目不会擅自修改客户端配置或订阅。
+
+如需由本项目持续维护这个精确域名，执行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\proxy-bypass.ps1 -EnableGuard
+```
+
+这会立即补齐例外，并将授权保存在本地 `proxy-bypass-policy.json`。新版守护在每轮检查时读取授权：仅在系统代理开启且该域名缺失时追加它，不更改 `ProxyEnable`、代理地址、订阅或其他域名。修复尝试最短间隔60秒，成功写入后记录 `PROXY_BYPASS_REPAIRED`。停止守护期间不会持续维护；TUN、浏览器代理扩展和其他路由层仍需单独处理。此功能默认关闭，一键安装不会自动启用。
+
+只关闭持续维护、保留已有例外：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\proxy-bypass.ps1 -DisableGuard
+```
+
+执行原有 `-Restore` 时也会先关闭守护，再移除由本项目添加的域名，避免刚撤销又被补回；如果域名原本就存在，则保留它。其他软件仍可能在检查间隔内短暂覆盖例外，因此这不是永不丢失的保证，也不能单凭缺失就断言是哪一个进程改写。
+
 ### 4. 启动
 
 双击 `start.cmd`。它隐藏启动后台守护，守护再启动本机 OCR 服务。重复启动不会产生多个守护循环。
@@ -188,6 +208,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\autostart.ps1 -Action Disa
 | `portal-lease.json` | 新版页面存活期限 |
 | `guardian.stop` | 停止标志，重新启动时自动清除 |
 | `proxy-bypass-backup.json` | 代理例外的本地回滚记录 |
+| `proxy-bypass-policy.json` | 是否允许持续维护认证域名例外，默认关闭 |
+| `network-events.jsonl` | 每行一个结构化的网络状态变化事件 |
+| `network-history-state.json` | 跨进程重启保存尚未结束的掉线观测状态 |
 
 实时查看日志：
 
@@ -210,6 +233,34 @@ Get-Content .\ocr.log -Tail 30 -Wait
 | `PageActive` | 新版网页心跳是否仍在有效期内 |
 | `PortalReachable` | 掉线时认证入口是否可达；联网正常时不检查，因此 `false` 不代表故障 |
 | `Action` | `online` 正常；`wait` 等待；`open` 本轮打开了认证入口 |
+| `OutageStartedAt` | 本次连续失败的首次检测时间；没有待恢复异常时为空 |
+| `OutageConfirmedAt` | 连续三次失败后的确认时间；尚未确认时为空 |
+| `ProxyGuardEnabled` | 是否已明确授权持续维护系统代理域名例外 |
+
+### 查看掉线开始、恢复时间和持续时长
+
+从本次升级后，网络事件同时写入 `guardian.log` 和 `network-events.jsonl`。正常联网时不反复记录；事件文件约1MB轮转，保留一个上一份文件。
+
+| 事件 | 含义 |
+|---|---|
+| `NETWORK_SUSPECT` | 首次检测失败，记录首次失败和此前最后一次正常检测时间 |
+| `NETWORK_DOWN` | 连续三次采样失败，确认检测异常；`StartedAt` 仍取首次失败时间 |
+| `NETWORK_RECOVERED` | 已确认异常后恢复，包含 `StartedAt`、`RecoveredAt`、`DurationSeconds`、`Duration` |
+| `NETWORK_TRANSIENT_RECOVERED` | 仅一至两次失败就恢复，单独标为短暂检测异常 |
+| `NETWORK_MONITORING_GAP` | 两次采样相隔超过90秒或系统时钟回拨，中间状态未知 |
+| `NETWORK_MONITORING_RESUMED` | 后台重启时恢复了尚未结束的异常记录，明确标记监测中断 |
+
+读取最近事件：
+
+```powershell
+Get-Content .\network-events.jsonl -Tail 20 |
+    ForEach-Object { $_ | ConvertFrom-Json } |
+    Format-Table Event, StartedAt, RecoveredAt, Duration, ContainsMonitoringGap -AutoSize
+```
+
+尚未出现新事件时，该文件可能还不存在，这是正常情况。`DurationSeconds` 是首次失败检测到恢复检测之间的观测时长，**不是精确的物理断网时长**。两个探测站同时不可达也会触发检测异常。`ContainsMonitoringGap=true` 表示时长包含未观测区间，不能推断期间一直断网；时钟回拨导致负时长时，时长字段留空而不是编造数值。
+
+历史状态会随每次采样更新，正常停止后也保留。此前版本未记录的掉线起止时间无法补算，本次升级不回填猜测的历史数据。
 
 典型认证事件：
 
@@ -298,6 +349,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\proxy-bypass.ps1 -Restore
 powershell -NoProfile -File .\tests.ps1
 powershell -NoProfile -File .\autostart.tests.ps1
 powershell -NoProfile -File .\setup.tests.ps1
+powershell -NoProfile -File .\network-history.tests.ps1
+powershell -NoProfile -File .\proxy-bypass.tests.ps1
 node --test .\userscript.test.cjs .\ocr-userscript.test.cjs
 .\.venv\Scripts\python.exe -m unittest discover -s . -p test_ocr_service.py
 node --check .\dgut-reconnect.user.js
@@ -308,6 +361,8 @@ node --check .\dgut-reconnect.user.js
 新增自启动测试在临时目录创建真实 Windows 快捷方式，覆盖注册、路径引用、隐藏窗口参数、幂等操作、拒绝修改其他配置及撤销；不修改真实启动文件夹。快捷方式启动可在当前会话验证，但实际重启／重新登录属于单独验收，本次没有自动重启电脑。
 
 安装器新增22项基础检查测试；另在包含中文、空格、方括号的独立临时目录完成从零安装、模型加载、重复安装跳过验证，并验证另一目录占用OCR端口时拒绝启动。现有版本合计71项自动测试通过。这些结果只代表已测环境，不代表所有用户电脑均已覆盖。
+
+网络事件与代理守护另外增加38项测试（累计109项），覆盖短暂失败、确认/恢复、持续时长、监测空档、历史序列化、例外被覆盖后的补回、保留其他例外、关闭与回滚。代理测试只操作隔离的临时注册表键和文件，不改真实系统代理，不主动断网。
 
 实际运行日志已出现新版提交认证事件，随后检查到联网正常。但尚未完成可控的“掉线 → 出现真实验证码 → 自动识别提交 → 联网恢复”端到端测试；单张截图识别正确不代表总体准确率。不要据此承诺全天候无故障或无人值守必然成功。
 
@@ -325,6 +380,7 @@ node --check .\dgut-reconnect.user.js
 | `autostart.ps1` | 当前用户登录自启动的启用、状态查询和禁用 |
 | `autostart.tests.ps1` | 独立临时目录内的自启动快捷方式测试 |
 | `proxy-bypass.ps1` | 精确代理例外及回滚 |
+| `network-history.tests.ps1` / `proxy-bypass.tests.ps1` | 网络事件和代理例外守护的回归测试 |
 | `requirements.txt` | OCR 主依赖版本 |
 | `tests.ps1` | 后台状态机测试 |
 | `userscript.test.cjs` / `ocr-userscript.test.cjs` | 网页行为与输入保护测试 |

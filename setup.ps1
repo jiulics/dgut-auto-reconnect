@@ -147,6 +147,9 @@ function Get-SetupStatus([string]$Root) {
     $proxy = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -ErrorAction SilentlyContinue
     $browser = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice' -ErrorAction SilentlyContinue
     $fresh = Test-FreshStatus $state
+    $guardPolicy=$null
+    $policyPath=Join-Path $Root 'proxy-bypass-policy.json'
+    if(Test-Path -LiteralPath $policyPath){ $guardPolicy=ConvertFrom-JsonSafe (Get-Content -LiteralPath $policyPath -Raw) }
     return [pscustomobject]@{
         RuntimeReady = $runtime; GuardianRunning = [bool]$running; StatusFresh = $fresh
         Online = $(if ($fresh) { $state.Online } else { $null })
@@ -157,6 +160,7 @@ function Get-SetupStatus([string]$Root) {
         DefaultBrowser = $browser.ProgId
         SystemProxyEnabled = ($proxy.ProxyEnable -eq 1); PacConfigured = [bool]$proxy.AutoConfigURL
         PortalBypass = (@($proxy.ProxyOverride -split ';') -contains 'login.dgut.edu.cn')
+        ProxyGuardEnabled = ($guardPolicy -and $guardPolicy.Enabled -is [bool] -and $guardPolicy.Enabled)
     }
 }
 function Show-Status($Status) {
@@ -170,6 +174,7 @@ function Show-Status($Status) {
         'OCR属于此项目目录' = $Status.OcrBelongsToThisFolder
         '网页已连接本机服务' = $Status.PageHeartbeat
         '登录自启动已注册' = $Status.AutostartRegistered
+        '代理例外守护已授权' = $Status.ProxyGuardEnabled
     }
     foreach ($label in $labels.Keys) {
         $value = if ($null -eq $labels[$label]) { '未确认' } elseif ($labels[$label]) { '是' } else { '否' }
@@ -223,7 +228,7 @@ if ($LibraryOnly) { return }
 try {
     if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw '当前仅支持 Windows；不要在 macOS/Linux 强行执行。' }
     $root = $PSScriptRoot
-    foreach ($file in @('guardian.ps1','ocr_service.py','autostart.ps1','requirements.txt','dgut-reconnect.user.js')) {
+    foreach ($file in @('guardian.ps1','ocr_service.py','autostart.ps1','proxy-bypass.ps1','requirements.txt','dgut-reconnect.user.js')) {
         if (!(Test-Path -LiteralPath (Join-Path $root $file))) { throw "项目文件缺失：$file。请先完整解压ZIP。" }
     }
     switch ($Action) {

@@ -9,6 +9,10 @@ portal-lease.json
 *.tmp
 guardian.stop
 proxy-bypass-backup.json
+proxy-bypass-policy.json
+network-history-state.json
+network-events.jsonl
+network-events.jsonl.*
 *.backup.txt
 internet.txt
 implementation-plan.md

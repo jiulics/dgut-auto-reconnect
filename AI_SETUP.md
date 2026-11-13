@@ -68,6 +68,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\proxy-bypass.ps1
 
 代理脚本仅增加认证域名的系统例外；不配置 TUN，不更换端口或订阅。不使用代理的人无需执行。
 
+如用户明确希望防止代理客户端覆盖例外，可使用 `proxy-bypass.ps1 -EnableGuard`。它将精确域名的持续维护授权保存在本地策略文件，新版守护只在系统代理启用且例外缺失时修复。`-DisableGuard` 停止维护但保留例外；`-Restore` 同时关闭维护并按备份撤销。不要默认开启该功能，也不要上传策略或配置备份。运行中的代理客户端可能覆盖磁盘配置，不能未经核实就直接编辑其内部配置文件或重启客户端。
+
 ### 5. 验收标准
 
 | 层级 | 通过证据 | 不能代替它的现象 |
@@ -92,6 +94,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\proxy-bypass.ps1
 - **OCR 不就绪**：检查缺失依赖与 ocr.log 的错误类别，避免上传含个人信息的文件。
 - **无网页心跳**：引导打开认证页、检查脚本启用、127.0.0.1权限和标签页休眠。不能据此直接断定安装失败。
 - **登录仍失败**：检查网页是否暂停、是否存在旧脚本、验证码类型与账号状态。不要扩大权限或提高提交频率。
+- **询问掉线历史**：读取 `network-events.jsonl` 的首次失败、确认与恢复事件。持续时长以采样为准；`ContainsMonitoringGap=true` 时不能说全程断网。旧版本没有记录的起止时间无法补算，不把 OCR 成功等同于联网恢复。
 - **安全策略阻止**：报告被阻止的具体操作，由用户在可信终端手动执行。不能尝试不同工具实现相同被阻止的行为。
 
 ### 7. 停止、撤销与移除
@@ -111,6 +114,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\proxy-bypass.ps1 -Restore
 powershell -NoProfile -File .\setup.tests.ps1
 powershell -NoProfile -File .\autostart.tests.ps1
 powershell -NoProfile -File .\tests.ps1
+powershell -NoProfile -File .\network-history.tests.ps1
+powershell -NoProfile -File .\proxy-bypass.tests.ps1
 node --test .\userscript.test.cjs .\ocr-userscript.test.cjs
 .\.venv\Scripts\python.exe -m unittest discover -s . -p test_ocr_service.py
 ```
